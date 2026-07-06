@@ -121,7 +121,7 @@
         const sendBtn = document.getElementById('send-btn');
         const statusDiv = document.getElementById('status');
 
-        // スマホで動作しやすい1B軽量モデル
+        // スマートフォンで軽量かつ高速に動く10億パラメータのモデルを指定
         const selectedModel = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; 
         
         let engine;
@@ -144,8 +144,8 @@
             try {
                 statusDiv.innerText = "WebGPUを検出。初期化を開始します（数分かかります）...";
                 
-                // 【最新API修正】MLCEngine.create を使用してメインスレッドで初期化
-                engine = await webllm.MLCEngine.create(
+                // 正しい最新API：CreateMLCEngine を呼び出し
+                engine = await webllm.CreateMLCEngine(
                     selectedModel,
                     {
                         initProgressCallback: (report) => {
@@ -209,6 +209,7 @@
             }
         });
 
+        // PWA用のService Worker登録
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js')
