@@ -2,549 +2,183 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Local Gemini Pro with Artifacts</title>
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#1e1e24">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebLLM Local Chat</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: #131314;
-            color: #e3e3e3;
-            display: flex;
-            height: 100vh;
-            height: 100dvh;
-            overflow: hidden;
+        /* スクロールバーのカスタマイズ */
+        ::-webkit-scrollbar {
+            width: 6px;
         }
-
-        #app-container {
-            display: flex;
-            flex: 1;
-            width: 100%;
-            height: 100%;
-            position: relative;
+        ::-webkit-scrollbar-track {
+            background: transparent;
         }
-
-        #chat-section {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            background-color: #131314;
-        }
-
-        header {
-            padding: 16px 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #2f2f30;
-        }
-        .brand { font-size: 1.25rem; font-weight: 500; color: #a8c7fa; }
-        
-        select {
-            background-color: #1e1e1f;
-            color: #e3e3e3;
-            border: 1px solid #444746;
-            padding: 6px 12px;
-            border-radius: 8px;
-            outline: none;
-            font-size: 0.85rem;
-            cursor: pointer;
-        }
-
-        #chat-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .status {
-            align-self: center;
-            background-color: #1e1e1f;
-            border: 1px solid #333538;
-            padding: 12px 16px;
-            border-radius: 12px;
-            font-size: 0.85rem;
-            max-width: 80%;
-            white-space: pre-wrap;
-            color: #c4c7c5;
-            text-align: center;
-        }
-
-        .message {
-            max-width: 85%;
-            line-height: 1.6;
-            word-break: break-word;
-            font-size: 1rem;
-        }
-        .user {
-            align-self: flex-end;
-            background-color: #2b2a33;
-            padding: 12px 18px;
-            border-radius: 20px 20px 4px 20px;
-        }
-        .ai {
-            align-self: flex-start;
-            padding: 12px 0;
-            width: 100%;
-        }
-
-        #input-outer-container {
-            padding: 0 24px 24px 24px;
-            background-color: #131314;
-        }
-        #file-preview-area {
-            display: flex;
-            gap: 10px;
-            padding: 8px 0;
-            flex-wrap: wrap;
-        }
-        .preview-pill {
-            background-color: #28292a;
-            border: 1px solid #444746;
-            padding: 4px 12px;
-            border-radius: 16px;
-            font-size: 0.85rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .remove-pill { cursor: pointer; color: #ffb4ab; font-weight: bold; }
-
-        #input-container {
-            background-color: #1e1e1f;
-            border-radius: 28px;
-            padding: 8px 16px 8px 24px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            border: 1px solid transparent;
-        }
-        #input-container:focus-within { border-color: #444746; background-color: #28292a; }
-        
-        textarea {
-            flex: 1;
-            background: none;
-            border: none;
-            resize: none;
-            height: 24px;
-            color: #e3e3e3;
-            font-size: 1rem;
-            outline: none;
-            line-height: 24px;
-        }
-        
-        .icon-btn {
-            background: none;
-            border: none;
-            color: #c4c7c5;
-            cursor: pointer;
-            font-size: 1.2rem;
-            padding: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #send-btn {
-            background-color: #a8c7fa;
-            color: #042f66;
-            border: none;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            font-weight: bold;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        #send-btn:disabled { background-color: #3c4043; color: #80868b; }
-
-        #artifact-section {
-            width: 45%;
-            min-width: 340px;
-            border-left: 1px solid #2f2f30;
-            background-color: #1c1b1f;
-            display: none;
-            flex-direction: column;
-            height: 100%;
-        }
-
-        .artifact-header {
-            padding: 16px;
-            background-color: #131314;
-            border-bottom: 1px solid #2f2f30;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .artifact-title { font-weight: 500; color: #c4c7c5; font-size: 0.9rem; }
-        .close-artifact {
-            background: none; border: none; color: #80868b;
-            font-size: 1.4rem; cursor: pointer; width: auto; height: auto;
-        }
-
-        .artifact-card {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        .file-info-box {
-            background-color: #28292a;
-            border: 1px solid #444746;
-            border-radius: 12px;
-            padding: 16px;
-        }
-        .file-meta { font-size: 0.8rem; color: #9aa0a6; margin-bottom: 8px; }
-        .file-name { font-size: 1.1rem; font-weight: bold; color: #a8c7fa; margin-bottom: 12px; }
-        
-        pre {
-            background-color: #0f0f11;
-            padding: 16px;
-            border-radius: 8px;
-            overflow-x: auto;
-            font-family: monospace;
-            font-size: 0.85rem;
-            color: #e3e3e3;
-            max-height: 350px;
-        }
-        .action-btn {
-            display: inline-block;
-            background-color: #004a77;
-            color: #c2e7ff;
-            border-radius: 8px;
-            padding: 10px 20px;
-            font-size: 0.9rem;
-            margin-top: 12px;
-            text-decoration: none;
-            font-weight: bold;
-            text-align: center;
-        }
-
-        @media (max-width: 768px) {
-            #app-container { flex-direction: column; }
-            #artifact-section {
-                position: absolute;
-                top: 0; right: 0; width: 100%; height: 100%;
-                z-index: 10;
-            }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
         }
     </style>
-
-    <script type="importmap">
-    {
-      "imports": {
-        "@mlc-ai/webllm": "https://esm.run/@mlc-ai/web-llm"
-      }
-    }
-    </script>
 </head>
-<body>
+<body class="bg-slate-50 h-screen flex flex-col font-sans antialiased text-slate-800">
 
-    <div id="app-container">
-        <div id="chat-section">
-            <header>
-                <div class="brand">Local Gemini Pro</div>
-                <select id="model-selector">
-                    <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (最軽量・爆速)</option>
-                    <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (標準性能)</option>
-                    <option value="gemma-2-2b-it-q4f16_1-MLC">Gemma 2 2B (Google)</option>
-                    <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen 2.5 1.5B (日本語特化)</option>
+    <header class="bg-white border-b border-slate-200 p-4 shadow-xs">
+        <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <h1 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <span>🤖</span> WebLLM Local Chat
+            </h1>
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+                <select id="model-select" class="w-full sm:w-64 bg-slate-100 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="Llama-3-8B-Instruct-q4f16_1-MLC">Llama 3 8B (ユーザー推奨・要スペック)</option>
+                    <option value="Phi-3-mini-4k-instruct-q4f16_1-MLC" selected>Phi-3 Mini 4K (軽量・高速)</option>
+                    <option value="Qwen2-0.5B-Instruct-q4f16_1-MLC">Qwen2 0.5B (超軽量・テスト用)</option>
                 </select>
-            </header>
-            
-            <div id="chat-container">
-                <div class="status" id="status">データベース同期中...</div>
-            </div>
-
-            <div id="input-outer-container">
-                <div id="file-preview-area"></div>
-                <div id="input-container">
-                    <button class="icon-btn" id="paperclip-btn" onclick="document.getElementById('file-loader').click()">📎</button>
-                    <input type="file" id="file-loader" style="display: none;" multiple>
-                    
-                    <textarea id="user-input" placeholder="メッセージを入力、またはファイルをここにドロップ..." disabled></textarea>
-                    <button id="send-btn" disabled>➔</button>
-                </div>
+                <button id="init-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm px-4 py-1.5 rounded-lg transition-colors shadow-xs shrink-0">
+                    初期化
+                </button>
             </div>
         </div>
+    </header>
 
-        <div id="artifact-section">
-            <div class="artifact-header">
-                <div class="artifact-title">Artifact Output</div>
-                <button class="close-artifact" id="close-artifact-btn">✕</button>
-            </div>
-            <div class="artifact-card" id="artifact-card-content"></div>
-        </div>
+    <div id="status-container" class="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs py-2 px-4 text-center hidden">
+        <span id="status-text">モデルを読み込んでいます...</span>
     </div>
 
-    <script type="module">
-        import { CreateWebWorkerEngine } from "@mlc-ai/webllm";
+    <main class="flex-1 overflow-y-auto p-4 md:p-6 container max-w-4xl mx-auto flex flex-col gap-4" id="chat-box">
+        <div class="bg-blue-50 border border-blue-100 text-blue-800 rounded-xl p-4 text-sm">
+            <strong>使い方:</strong> 右上の「初期化」ボタンを押すと、ブラウザへのモデルのダウンロードとWebGPUのセットアップが始まります（初回は数GBの通信が発生します）。完了後、チャットが可能になります。
+        </div>
+    </main>
 
-        const chatContainer = document.getElementById('chat-container');
-        const userInput = document.getElementById('user-input');
-        const sendBtn = document.getElementById('send-btn');
-        const statusDiv = document.getElementById('status');
-        const modelSelector = document.getElementById('model-selector');
-        const artifactSection = document.getElementById('artifact-section');
-        const artifactCardContent = document.getElementById('artifact-card-content');
-        const closeArtifactBtn = document.getElementById('close-artifact-btn');
-        const fileLoader = document.getElementById('file-loader');
-        const filePreviewArea = document.getElementById('file-preview-area');
+    <footer class="bg-white border-t border-slate-200 p-4 shadow-md">
+        <div class="max-w-4xl mx-auto flex gap-2 items-end">
+            <textarea id="user-input" rows="1" placeholder="メッセージを入力... (Ctrl+Enterで送信)" 
+                class="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none max-h-32" disabled></textarea>
+            <button id="send-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition-colors disabled:opacity-40 disabled:hover:bg-indigo-600" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+            </button>
+        </div>
+    </footer>
+
+    <script type="module">
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
         let engine;
-        let db = null;
-        let conversationHistory = [];
-        let attachedFilesContents = [];
+        const chatContainer = document.getElementById("chat-box");
+        const userInput = document.getElementById("user-input");
+        const sendBtn = document.getElementById("send-btn");
+        const initBtn = document.getElementById("init-btn");
+        const modelSelect = document.getElementById("model-select");
+        const statusContainer = document.getElementById("status-container");
+        const statusText = document.getElementById("status-text");
 
-        // IndexedDB 永久記憶
-        function initDatabase() {
-            return new Promise((resolve, reject) => {
-                try {
-                    const request = indexedDB.open("LocalLLMMemoryV2", 1);
-                    request.onupgradeneeded = (e) => {
-                        const database = e.target.result;
-                        if (!database.objectStoreNames.contains("messages")) {
-                            database.createObjectStore("messages", { keyPath: "id", autoIncrement: true });
-                        }
-                    };
-                    request.onsuccess = (e) => { db = e.target.result; resolve(); };
-                    request.onerror = (e) => { reject(e.target.error); };
-                } catch (err) { reject(err); }
-            });
-        }
+        // チャット履歴
+        let messages = [];
 
-        async function loadHistory() {
-            if (!db) { initLLM(); return; }
-            try {
-                const transaction = db.transaction(["messages"], "readonly");
-                const store = transaction.objectStore("messages");
-                const request = store.getAll();
-                request.onsuccess = (e) => {
-                    conversationHistory = e.target.result || [];
-                    if (conversationHistory.length > 0) {
-                        statusDiv.innerText = `永続記憶から ${conversationHistory.length} 件のログを復元しました。`;
-                        conversationHistory.forEach(msg => {
-                            appendMessage(msg.text, msg.sender);
-                            if (msg.sender === 'ai') inspectAndProcessArtifact(msg.text, false);
-                        });
-                    }
-                    initLLM();
-                };
-                request.onerror = () => { initLLM(); };
-            } catch (err) { initLLM(); }
-        }
-
-        function saveToMemory(text, sender) {
-            conversationHistory.push({ text, sender });
-            if (!db) return;
-            try {
-                const transaction = db.transaction(["messages"], "readwrite");
-                const store = transaction.objectStore("messages");
-                store.add({ text, sender, timestamp: Date.now() });
-            } catch (err) { console.error(err); }
-        }
-
-        // エンジン初期化
-        async function initLLM() {
-            const selectedModel = modelSelector.value;
-            userInput.disabled = true;
-            sendBtn.disabled = true;
-
-            try {
-                statusDiv.innerText = "バックグラウンドWorkerを起動し、高速推論コアを構築中...";
-
-                // 【修正】Worker内部から確実かつ高速にライブラリをロードするために、importScripts 形式へ変更
-                const workerCode = `
-                    importScripts("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/lib/index.js");
-                    if (typeof self.webllm === 'undefined' && typeof WebWorkerMLCEngineHandler === 'undefined') {
-                        console.error("WebLLM のロードに失敗しました。");
-                    }
-                    const HandlerClass = typeof WebWorkerMLCEngineHandler !== 'undefined' ? WebWorkerMLCEngineHandler : self.webllm.WebWorkerMLCEngineHandler;
-                    const handler = new HandlerClass();
-                    self.onmessage = (msg) => { handler.onmessage(msg); };
-                `;
-                const blob = new Blob([workerCode], { type: "text/javascript" });
-                const workerUrl = URL.createObjectURL(blob);
-
-                // メイン側は importmap から読み込んだ安定版関数で起動
-                engine = await CreateWebWorkerEngine(
-                    new Worker(workerUrl),
-                    selectedModel,
-                    {
-                        initProgressCallback: (report) => {
-                            statusDiv.innerText = report.text;
-                        }
-                    }
-                );
-                
-                statusDiv.innerText = "準備完了！WebGPU + Workerによる高速ローカル処理が有効です。";
-                userInput.disabled = false;
-                sendBtn.disabled = false;
-            } catch (error) {
-                statusDiv.innerText = `初期化エラー: ${error.message || error}\nWebGPUが有効かご確認ください。`;
-                console.error(error);
-            }
-        }
-
-        modelSelector.addEventListener('change', initLLM);
-
-        // ファイルのインポート読み込み処理
-        fileLoader.addEventListener('change', (e) => handleFileImport(e.target.files));
-        window.addEventListener('dragover', (e) => e.preventDefault());
-        window.addEventListener('drop', (e) => {
-            e.preventDefault();
-            if(e.dataTransfer.files.length > 0) handleFileImport(e.dataTransfer.files);
+        // 画面自動調整（テキストエリアの自動伸縮）
+        userInput.addEventListener("input", () => {
+            userInput.style.height = "auto";
+            userInput.style.height = userInput.scrollHeight + "px";
         });
 
-        function handleFileImport(files) {
-            for (let file of files) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    attachedFilesContents.push({ name: file.name, content: event.target.result });
-                    renderFilePills();
-                };
-                reader.readAsText(file);
-            }
-        }
-
-        function renderFilePills() {
-            filePreviewArea.innerHTML = '';
-            attachedFilesContents.forEach((f, idx) => {
-                const pill = document.createElement('div');
-                pill.classList.add('preview-pill');
-                pill.innerHTML = `📄 ${f.name} <span class="remove-pill" id="remove-file-${idx}">✕</span>`;
-                filePreviewArea.appendChild(pill);
-                
-                document.getElementById(`remove-file-${idx}`).addEventListener('click', () => {
-                    attachedFilesContents.splice(idx, 1);
-                    renderFilePills();
-                });
-            });
-        }
-
-        function appendMessage(text, sender) {
-            const msgDiv = document.createElement('div');
-            msgDiv.classList.add('message', sender);
-            msgDiv.innerText = text;
-            chatContainer.appendChild(msgDiv);
+        // メッセージを画面に追加
+        function appendMessage(role, text) {
+            const wrapper = document.createElement("div");
+            wrapper.className = `flex ${role === "user" ? "justify-end" : "justify-start"}`;
+            
+            const msgBubble = document.createElement("div");
+            msgBubble.className = `max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-xs ${
+                role === "user" 
+                ? "bg-indigo-600 text-white rounded-br-none" 
+                : "bg-white border border-slate-200 text-slate-800 rounded-bl-none"
+            }`;
+            msgBubble.innerText = text;
+            
+            wrapper.appendChild(msgBubble);
+            chatContainer.appendChild(wrapper);
+            
+            // 最下部へ自動スクロール
             chatContainer.scrollTop = chatContainer.scrollHeight;
-            return msgDiv;
+            return msgBubble;
         }
 
-        // AI 2：Artifact機能
-        function inspectAndProcessArtifact(currentText, shouldOpen = true) {
-            const codeBlockRegex = /```(\w*)\n([\s\S]*?)(```|$)/;
-            const match = currentText.match(codeBlockRegex);
-
-            if (match) {
-                const lang = match[1] || 'txt';
-                const code = match[2];
-                if (code.trim().length > 3) {
-                    renderArtifact(lang, code);
-                    if (shouldOpen) artifactSection.style.display = 'flex';
-                }
-            }
-        }
-
-        function renderArtifact(lang, code) {
-            artifactCardContent.innerHTML = '';
-            const extMap = {
-                html: 'html', css: 'css', javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts',
-                python: 'py', py: 'py', ruby: 'rb', csharp: 'cs', cpp: 'cpp', c: 'c',
-                rust: 'rs', go: 'go', java: 'java', php: 'php', sh: 'sh', powershell: 'ps1',
-                json: 'json', yaml: 'yaml', yml: 'yml', xml: 'xml', markdown: 'md', md: 'md'
-            };
-            const ext = extMap[lang.toLowerCase()] || lang || 'txt';
-            const fileName = `app_component_export.${ext}`;
-
-            const box = document.createElement('div');
-            box.classList.add('file-info-box');
-            box.innerHTML = `
-                <div class="file-meta">AI 2 構造解析: 自動識別拡張子 (.${ext})</div>
-                <div class="file-name">📄 ${fileName}</div>
-                <pre><code>${escapeHtml(code)}</code></pre>
-                <a class="action-btn" id="dl-link" href="#">このファイルをエクスポート</a>
-            `;
-            artifactCardContent.appendChild(box);
-
-            const blob = new Blob([code], { type: 'text/plain' });
-            const dlLink = box.querySelector('#dl-link');
-            dlLink.href = URL.createObjectURL(blob);
-            dlLink.download = fileName;
-        }
-
-        function escapeHtml(str) {
-            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        }
-
-        // 生成対話 & 添付ファイルコンテキスト処理
-        async function handleSend() {
-            let text = userInput.value.trim();
-            if (!text && attachedFilesContents.length === 0) return;
-
-            userInput.value = '';
-            let contextPayload = "";
-            if (attachedFilesContents.length > 0) {
-                contextPayload += "[分析対象ファイルデータ]\n";
-                attachedFilesContents.forEach(f => {
-                    contextPayload += `--- ファイル名: ${f.name} ---\n${f.content}\n\n`;
-                });
-                contextPayload += "[ユーザーからの指示]\n" + text;
-                appendMessage(`[ファイルを添付しました: ${attachedFilesContents.map(f=>f.name).join(', ')}]\n${text}`, 'user');
-            } else {
-                appendMessage(text, 'user');
-            }
-
-            const finalPrompt = contextPayload || text;
-            saveToMemory(finalPrompt, 'user');
-
-            userInput.disabled = true;
-            sendBtn.disabled = true;
-            const aiMessageDiv = appendMessage("思考解析中...", 'ai');
-
+        // WebLLMの初期化
+        initBtn.addEventListener("click", async () => {
+            initBtn.disabled = true;
+            modelSelect.disabled = true;
+            statusContainer.classList.remove("hidden");
+            
             try {
-                const promptMessages = conversationHistory.map(h => ({
-                    role: h.sender === 'user' ? 'user' : 'assistant',
-                    content: h.text
-                })).slice(-12);
+                // 進捗コールバック
+                const initProgressCallback = (report) => {
+                    statusText.innerText = report.text;
+                };
 
-                if (contextPayload) promptMessages[promptMessages.length - 1].content = finalPrompt;
+                engine = await webllm.CreateCreateMLCEngine(
+                    modelSelect.value,
+                    { initProgressCallback }
+                );
 
-                const chunks = await engine.chat.completions.create({
-                    messages: promptMessages,
-                    stream: true
-                });
-
-                let reply = "";
-                for await (const chunk of chunks) {
-                    reply += chunk.choices[0]?.delta?.content || "";
-                    aiMessageDiv.innerText = reply;
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                    inspectAndProcessArtifact(reply, true);
-                }
-
-                saveToMemory(reply, 'ai');
-
-            } catch (e) {
-                aiMessageDiv.innerText = "エラーが発生しました。";
-                console.error(e);
-            } finally {
-                attachedFilesContents = [];
-                renderFilePills();
+                statusContainer.className = "bg-emerald-50 border-b border-emerald-200 text-emerald-800 text-xs py-2 px-4 text-center";
+                statusText.innerText = "準備完了！ローカル環境で実行中。";
+                
                 userInput.disabled = false;
                 sendBtn.disabled = false;
-                userInput.focus();
+                initBtn.innerText = "初期化済み";
+            } catch (error) {
+                statusContainer.className = "bg-rose-50 border-b border-rose-200 text-rose-800 text-xs py-2 px-4 text-center";
+                statusText.innerText = "エラーが発生しました: " + error.message;
+                initBtn.disabled = false;
+                modelSelect.disabled = false;
+            }
+        });
+
+        // 送信処理
+        async function handleSend() {
+            const text = userInput.value.trim();
+            if (!text || !engine) return;
+
+            userInput.value = "";
+            userInput.style.height = "auto";
+            
+            // ユーザーメッセージ追加
+            appendMessage("user", text);
+            messages.push({ role: "user", content: text });
+
+            // AIの返答枠を用意
+            const aiBubble = appendMessage("assistant", "Thinking...");
+            
+            try {
+                let aiResponse = "";
+                const reply = await engine.chat.completions.create({
+                    messages: messages,
+                    stream: true // ストリーミング再生を有効化
+                });
+
+                for await (const chunk of reply) {
+                    const delta = chunk.choices[0]?.delta?.content || "";
+                    aiResponse += delta;
+                    aiBubble.innerText = aiResponse;
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+
+                messages.push({ role: "assistant", content: aiResponse });
+
+            } catch (error) {
+                aiBubble.innerText = "エラーが発生しました: " + error.message;
             }
         }
 
-        sendBt
+        sendBtn.addEventListener("click", handleSend);
+        
+        // Ctrl + Enter で送信
+        userInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && e.ctrlKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+    </script>
+</body>
+</html>
