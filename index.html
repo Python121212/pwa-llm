@@ -15,8 +15,8 @@
       color: #e0e0e0;
       display: flex;
       flex-direction: column;
-      height: 100vh; /* 画面の高さに合わせる */
-      height: 100dvh; /* モバイルのツールバー対策 */
+      height: 100vh;
+      height: 100dvh;
     }
     header {
       background-color: #1f1f1f;
@@ -29,6 +29,8 @@
       font-size: 12px;
       color: #aaa;
       margin-top: 5px;
+      padding: 0 10px;
+      word-break: break-all;
     }
     #chat-container {
       flex: 1;
@@ -68,7 +70,7 @@
       border: 1px solid #444;
       background-color: #2a2a2a;
       color: white;
-      font-size: 16px; /* モバイルでのズーム防止 */
+      font-size: 16px;
       outline: none;
     }
     button {
@@ -90,11 +92,11 @@
 
   <header>
     <div>Local LLM PWA</div>
-    <div id="status">モデルの初期化待ち...</div>
+    <div id="status">ブラウザのチェック中...</div>
   </header>
 
   <div id="chat-container">
-    <div class="message ai">こんにちは！ブラウザ上で動くローカルLLMです。初回はモデルのダウンロードに時間がかかります。</div>
+    <div class="message ai">こんにちは！ブラウザ上で動くローカルLLMです。初回はモデルのダウンロード（数百MB〜1GB程度）が発生します。</div>
   </div>
 
   <div id="input-container">
@@ -105,8 +107,9 @@
   <script type="module">
     import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
-    // 軽量で日本語もある程度動くモデルを選択 (Llama-3-8Bベースの量子化版など、環境に応じて変更可能)
-    const selectedModel = "Llama-3-8B-Instruct-q4f32_1-MLC";
+    // スマホのメモリでも耐えられる軽量な1.5Bモデルに設定
+    // ※これでも落ちる場合は "Qwen2.5-0.5B-Instruct-q4f16_1-MLC" に変更してください
+    const selectedModel = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
     
     let engine;
     const statusDiv = document.getElementById("status");
@@ -114,40 +117,47 @@
     const sendBtn = document.getElementById("send-btn");
     const chatContainer = document.getElementById("chat-container");
 
-    // 初期化関数
     async function initLLM() {
+      // 1. WebGPUの対応チェック
+      if (!navigator.gpu) {
+        statusDiv.innerText = "エラー: このブラウザ/端末はWebGPUに対応していません。";
+        return;
+      }
+
       try {
+        statusDiv.innerText = "モデルの初期化を開始します...";
+        
+        // WebWorkerの立ち上げ
         engine = new webllm.CreateWebWorkerEngine(
           new Worker(new URL("https://esm.run/@mlc-ai/web-llm", import.meta.url), {type: "module"}),
           {
             initProgressCallback: (report) => {
-              statusDiv.innerText = report.text;
+              statusDiv.innerText = report.text; // ダウンロード進捗を表示
             }
           }
         );
         
+        // モデルのロード（ここでメモリ不足になるとcatchに飛びます）
         await engine.reload(selectedModel);
-        statusDiv.innerText = "準備完了 (ローカル動作中)";
+        statusDiv.innerText = "準備完了 (完全にローカルで動作中)";
         inputField.disabled = false;
         sendBtn.disabled = false;
       } catch (error) {
-        statusDiv.innerText = "初期化エラー: WebGPUが未有効か非対応のブラウザです。";
+        statusDiv.innerText = "初期化エラー: メモリ（RAM）不足、または通信エラーです。";
         console.error(error);
       }
     }
 
-    // メッセージ送信ロジックをグローバルに公開
+    // メッセージ送信処理
     window.sendMessage = async function() {
       const text = inputField.value.trim();
       if (!text) return;
 
-      // ユーザーメッセージ追加
       appendMessage(text, "user");
       inputField.value = "";
       inputField.disabled = true;
       sendBtn.disabled = true;
 
-      // AI応答用の空枠を作成
       const aiMessageDiv = appendMessage("思考中...", "ai");
 
       try {
@@ -162,7 +172,7 @@
           const content = chunk.choices[0]?.delta?.content || "";
           reply += content;
           aiMessageDiv.innerText = reply;
-          chatContainer.scrollTop = chatContainer.scrollHeight; // 自動スクロール
+          chatContainer.scrollTop = chatContainer.scrollHeight;
         }
       } catch (e) {
         aiMessageDiv.innerText = "エラーが発生しました。";
@@ -192,7 +202,7 @@
       });
     }
 
-    // 起動
+    // 初期化を実行
     initLLM();
   </script>
 </body>
