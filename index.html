@@ -146,7 +146,7 @@
                 statusDiv.innerText = "WebGPUを検出しました。\nモデルのダウンロードと初期化を開始します（数分かかります）...";
                 
                 // スマホでの動作安定のため、Workerを使わずメインスレッドで直接Engineを生成
-                engine = await webllm.CreateEngine(
+                engine = await webllm.createEngine(
                     selectedModel,
                     {
                         initProgressCallback: (report) => {
