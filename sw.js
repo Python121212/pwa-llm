@@ -1,11 +1,11 @@
-const CACHE_NAME = 'local-llm-pwa-v1';
+const CACHE_NAME = 'webllm-pwa-v1';
 const ASSETS = [
-  './',
-  './index.html',
-  './manifest.json'
+  'index.html',
+  'manifest.json',
+  'https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4'
 ];
 
-// インストール時に静的資産をキャッシュ
+// インストール時に静的ファイルをキャッシュ
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -14,26 +14,11 @@ self.addEventListener('install', (e) => {
   );
 });
 
-// アクティベート時に古いキャッシュを削除
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
-      );
-    })
-  );
-});
-
-// ネットワークファースト（またはキャッシュフォールバック）でフェッチ
+// リクエスト時にキャッシュがあればそれを返す（ネットワークファーストまたはキャッシュファースト）
 self.addEventListener('fetch', (e) => {
   e.respondWith(
-    fetch(e.request).catch(() => {
-      return caches.match(e.request);
+    caches.match(e.request).then((response) => {
+      return response || fetch(e.request);
     })
   );
 });
