@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gemini-like Local LLM with Artifacts</title>
+    <title>Local Gemini Pro with Artifacts</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e1e24">
     <style>
@@ -94,19 +94,6 @@
             width: 100%;
         }
 
-        /* 添付ファイル表示用 */
-        .file-attachment {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background-color: #004a77;
-            color: #c2e7ff;
-            padding: 6px 12px;
-            border-radius: 16px;
-            font-size: 0.85rem;
-            margin-bottom: 6px;
-        }
-
         /* 入力UI周辺・添付機能 */
         #input-outer-container {
             padding: 0 24px 24px 24px;
@@ -186,7 +173,7 @@
             min-width: 340px;
             border-left: 1px solid #2f2f30;
             background-color: #1c1b1f;
-            display: none; /* JSでflexに変更 */
+            display: none; /* JS側で flex に切り替え */
             flex-direction: column;
             height: 100%;
         }
@@ -262,10 +249,10 @@
             <header>
                 <div class="brand">Local Gemini Pro</div>
                 <select id="model-selector">
-                    <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (最軽量高速化モデル)</option>
-                    <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (標準)</option>
+                    <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (最軽量・爆速)</option>
+                    <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (標準性能)</option>
                     <option value="gemma-2-2b-it-q4f16_1-MLC">Gemma 2 2B (Google)</option>
-                    <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen 2.5 1.5B (日本語推奨)</option>
+                    <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen 2.5 1.5B (日本語特化)</option>
                 </select>
             </header>
             
@@ -295,7 +282,7 @@
     </div>
 
     <script type="module">
-        import * as webllm from "[https://esm.run/@mlc-ai/web-llm](https://esm.run/@mlc-ai/web-llm)";
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
         const chatContainer = document.getElementById('chat-container');
         const userInput = document.getElementById('user-input');
@@ -309,41 +296,76 @@
         const filePreviewArea = document.getElementById('file-preview-area');
 
         let engine;
-        let db;
+        let db = null;
         let conversationHistory = [];
-        let attachedFilesContents = []; // 読み込んだファイルのコンテキスト格納庫
+        let attachedFilesContents = [];
 
-        // 1. IndexedDB 永久記憶
+        // 1. IndexedDB 永久記憶 (安全なフォールバック機能付き)
         function initDatabase() {
-            return new Promise((resolve) => {
-                const request = indexedDB.open("LocalLLMMemoryV2", 1);
-                request.onupgradeneeded = (e) => {
-                    db = e.target.result;
-                    if (!db.objectStoreNames.contains("messages")) {
-                        db.createObjectStore("messages", { keyPath: "id", autoIncrement: true });
-                    }
-                };
-                request.onsuccess = (e) => { db = e.target.result; resolve(); };
+            return new Promise((resolve, reject) => {
+                try {
+                    const request = indexedDB.open("LocalLLMMemoryV2", 1);
+                    
+                    request.onupgradeneeded = (e) => {
+                        const database = e.target.result;
+                        if (!database.objectStoreNames.contains("messages")) {
+                            database.createObjectStore("messages", { keyPath: "id", autoIncrement: true });
+                        }
+                    };
+                    
+                    request.onsuccess = (e) => { 
+                        db = e.target.result; 
+                        resolve(); 
+                    };
+                    
+                    request.onerror = (e) => { reject(e.target.error); };
+                } catch (err) {
+                    reject(err);
+                }
             });
         }
 
         async function loadHistory() {
-            const transaction = db.transaction(["messages"], "readonly");
-            const store = transaction.objectStore("messages");
-            store.getAll().onsuccess = (e) => {
-                conversationHistory = e.target.result || [];
-                if (conversationHistory.length > 0) {
-                    statusDiv.innerText = `永続記憶から ${conversationHistory.length} 件のログをロードしました。`;
-                    conversationHistory.forEach(msg => {
-                        appendMessage(msg.text, msg.sender);
-                        if (msg.sender === 'ai') inspectAndProcessArtifact(msg.text, false);
-                    });
-                }
+            if (!db) {
                 initLLM();
-            };
+                return;
+            }
+            try {
+                const transaction = db.transaction(["messages"], "readonly");
+                const store = transaction.objectStore("messages");
+                const request = store.getAll();
+                
+                request.onsuccess = (e) => {
+                    conversationHistory = e.target.result || [];
+                    if (conversationHistory.length > 0) {
+                        statusDiv.innerText = `永続記憶から ${conversationHistory.length} 件のログを復元しました。`;
+                        conversationHistory.forEach(msg => {
+                            appendMessage(msg.text, msg.sender);
+                            if (msg.sender === 'ai') inspectAndProcessArtifact(msg.text, false);
+                        });
+                    }
+                    initLLM();
+                };
+                
+                request.onerror = () => { initLLM(); };
+            } catch (err) {
+                initLLM();
+            }
         }
 
-        // 2. WebWorker経由で超高速・並列初期化
+        function saveToMemory(text, sender) {
+            conversationHistory.push({ text, sender });
+            if (!db) return;
+            try {
+                const transaction = db.transaction(["messages"], "readwrite");
+                const store = transaction.objectStore("messages");
+                store.add({ text, sender, timestamp: Date.now() });
+            } catch (err) {
+                console.error("Database save fallback active:", err);
+            }
+        }
+
+        // 2. WebWorkerによる超高速・バックグラウンド並列処理
         async function initLLM() {
             const selectedModel = modelSelector.value;
             userInput.disabled = true;
@@ -352,9 +374,8 @@
             try {
                 statusDiv.innerText = "バックグラウンドWorkerを起動し、高速推論コアを構築中...";
                 
-                // WebWorkerを利用してメインスレッドの描画遅延を一切排除
                 engine = await webllm.CreateCreateWebWorkerEngine(
-                    new Worker(new URL("[https://esm.run/@mlc-ai/web-llm](https://esm.run/@mlc-ai/web-llm)")),
+                    new Worker(new URL("https://esm.run/@mlc-ai/web-llm")),
                     selectedModel,
                     {
                         initProgressCallback: (report) => {
@@ -367,16 +388,15 @@
                 userInput.disabled = false;
                 sendBtn.disabled = false;
             } catch (error) {
-                statusDiv.innerText = `初期化エラー: ${error.message}`;
+                statusDiv.innerText = `初期化エラー: ${error.message || error}\nWebGPUが有効かご確認ください。`;
             }
         }
 
         modelSelector.addEventListener('change', initLLM);
 
-        // 3. ファイル読み込み(インポート)システム
+        // 3. ファイルのインポート読み込み処理 (すべてのテキストベース系に対応)
         fileLoader.addEventListener('change', (e) => handleFileImport(e.target.files));
         
-        // ドラッグ＆ドロップ対応
         window.addEventListener('dragover', (e) => e.preventDefault());
         window.addEventListener('drop', (e) => {
             e.preventDefault();
@@ -390,7 +410,7 @@
                     attachedFilesContents.push({ name: file.name, content: event.target.result });
                     renderFilePills();
                 };
-                reader.readAsText(file); // テキストベース・コード・JSON・CSV等全対応
+                reader.readAsText(file);
             }
         }
 
@@ -399,15 +419,16 @@
             attachedFilesContents.forEach((f, idx) => {
                 const pill = document.createElement('div');
                 pill.classList.add('preview-pill');
-                pill.innerHTML = `📄 ${f.name} <span class="remove-pill" onclick="window.removeAttachedFile(${idx})">✕</span>`;
+                pill.innerHTML = `📄 ${f.name} <span class="remove-pill" id="remove-file-${idx}">✕</span>`;
                 filePreviewArea.appendChild(pill);
+                
+                // 動的イベント付与
+                document.getElementById(`remove-file-${idx}`).addEventListener('click', () => {
+                    attachedFilesContents.splice(idx, 1);
+                    renderFilePills();
+                });
             });
         }
-
-        window.removeAttachedFile = (idx) => {
-            attachedFilesContents.splice(idx, 1);
-            renderFilePills();
-        };
 
         function appendMessage(text, sender) {
             const msgDiv = document.createElement('div');
@@ -418,7 +439,7 @@
             return msgDiv;
         }
 
-        // 4. AI 2：全拡張子対応自動パース・Artifact
+        // 4. AI 2：あらゆるコードを解析して動的に拡張子をマッピングするArtifact機能
         function inspectAndProcessArtifact(currentText, shouldOpen = true) {
             const codeBlockRegex = /```(\w*)\n([\s\S]*?)(```|$)/;
             const match = currentText.match(codeBlockRegex);
@@ -436,7 +457,6 @@
         function renderArtifact(lang, code) {
             artifactCardContent.innerHTML = '';
             
-            // すべての言語コードを安全に適切な拡張子へマップ
             const extMap = {
                 html: 'html', css: 'css', javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts',
                 python: 'py', py: 'py', ruby: 'rb', csharp: 'cs', cpp: 'cpp', c: 'c',
@@ -466,14 +486,13 @@
             return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
 
-        // 5. 対話実行・ファイル分析コンテキスト統合
+        // 5. 生成対話 & 添付ファイルコンテキスト処理
         async function handleSend() {
             let text = userInput.value.trim();
             if (!text && attachedFilesContents.length === 0) return;
 
             userInput.value = '';
             
-            // ファイルが添付されている場合、プロンプトの先頭にコンテキストとして注入・分析させる
             let contextPayload = "";
             if (attachedFilesContents.length > 0) {
                 contextPayload += "[分析対象ファイルデータ]\n";
@@ -481,17 +500,13 @@
                     contextPayload += `--- ファイル名: ${f.name} ---\n${f.content}\n\n`;
                 });
                 contextPayload += "[ユーザーからの指示]\n" + text;
-                appendMessage(`[ファイルを添付しました]\n${text}`, 'user');
+                appendMessage(`[ファイルを添付しました: ${attachedFilesContents.map(f=>f.name).join(', ')}]\n${text}`, 'user');
             } else {
                 appendMessage(text, 'user');
             }
 
             const finalPrompt = contextPayload || text;
-            
-            // 履歴保存
-            const transaction = db.transaction(["messages"], "readwrite");
-            transaction.objectStore("messages").add({ text: finalPrompt, sender: 'user' });
-            conversationHistory.push({ text: finalPrompt, sender: 'user' });
+            saveToMemory(finalPrompt, 'user');
 
             userInput.disabled = true;
             sendBtn.disabled = true;
@@ -503,7 +518,6 @@
                     content: h.text
                 })).slice(-12);
 
-                // もし今回ファイル添付があれば、直近メッセージを置き換え
                 if (contextPayload) promptMessages[promptMessages.length - 1].content = finalPrompt;
 
                 const chunks = await engine.chat.completions.create({
@@ -519,14 +533,13 @@
                     inspectAndProcessArtifact(reply, true);
                 }
 
-                db.transaction(["messages"], "readwrite").add({ text: reply, sender: 'ai' });
-                conversationHistory.push({ text: reply, sender: 'ai' });
+                saveToMemory(reply, 'ai');
 
             } catch (e) {
                 aiMessageDiv.innerText = "エラーが発生しました。";
                 console.error(e);
             } finally {
-                attachedFilesContents = []; // コンテキストをクリア
+                attachedFilesContents = [];
                 renderFilePills();
                 userInput.disabled = false;
                 sendBtn.disabled = false;
@@ -539,16 +552,9 @@
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
         });
 
-        // ✕ボタンで確実に画面領域を閉じるUI修正
+        // ✕ボタンで確実に閉じられるようにするイベントの登録
         closeArtifactBtn.addEventListener('click', () => {
             artifactSection.style.display = 'none';
         });
 
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(e => {}); });
-        }
-
-        initDatabase().then(loadHistory);
-    </script>
-</body>
-</html>
+        if ('serviceWorker' in navigator)
