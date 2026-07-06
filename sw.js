@@ -1,4 +1,4 @@
-const CACHE_NAME = 'local-llm-cache-v1';
+const CACHE_NAME = 'local-llm-pwa-v1';
 const ASSETS = [
   './',
   './index.html',
@@ -29,11 +29,11 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// フェッチリクエスト時にキャッシュを優先（LLMのWebWorkerスクリプト等に対応）
+// ネットワークファースト（またはキャッシュフォールバック）でフェッチ
 self.addEventListener('fetch', (e) => {
   e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      return cachedResponse || fetch(e.request);
+    fetch(e.request).catch(() => {
+      return caches.match(e.request);
     })
   );
 });
