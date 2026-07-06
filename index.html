@@ -14,7 +14,7 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
-            height: 100dvh; /* モバイルのツールバーを考慮した高さ */
+            height: 100dvh;
             overflow: hidden;
         }
         header {
@@ -113,7 +113,7 @@
     </div>
 
     <script type="module">
-        // WebLLMの読み込み
+        // WebLLM のインポート
         import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
         const chatContainer = document.getElementById('chat-container');
@@ -121,7 +121,7 @@
         const sendBtn = document.getElementById('send-btn');
         const statusDiv = document.getElementById('status');
 
-        // スマホのメモリ（RAM）制限に引っかからないよう、最軽量クラスの1Bモデルを指定
+        // スマホで動作しやすい1B軽量モデル
         const selectedModel = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; 
         
         let engine;
@@ -136,17 +136,16 @@
         }
 
         async function initLLM() {
-            // WebGPUがブラウザ・システムに認識されているかチェック
             if (!navigator.gpu) {
                 statusDiv.innerText = "エラー: お使いのブラウザや端末はWebGPUに対応していないか、無効化されています。";
                 return;
             }
 
             try {
-                statusDiv.innerText = "WebGPUを検出しました。\nモデルのダウンロードと初期化を開始します（数分かかります）...";
+                statusDiv.innerText = "WebGPUを検出。初期化を開始します（数分かかります）...";
                 
-                // スマホでの動作安定のため、Workerを使わずメインスレッドで直接Engineを生成
-                engine = await webllm.createEngine(
+                // 【最新API修正】MLCEngine.create を使用してメインスレッドで初期化
+                engine = await webllm.MLCEngine.create(
                     selectedModel,
                     {
                         initProgressCallback: (report) => {
@@ -159,10 +158,9 @@
                 userInput.disabled = false;
                 sendBtn.disabled = false;
             } catch (error) {
-                // エラー内容を詳しく画面に出力する
                 statusDiv.style.backgroundColor = "#fee2e2";
                 statusDiv.style.color = "#991b1b";
-                statusDiv.innerText = `初期化失敗詳細:\n${error.message || error}\n\n※スマホのメモリ不足(Out of memory)の可能性があります。`;
+                statusDiv.innerText = `初期化失敗詳細:\n${error.message || error}`;
                 console.error(error);
             }
         }
@@ -211,7 +209,6 @@
             }
         });
 
-        // PWA用のService Worker登録
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js')
@@ -220,7 +217,6 @@
             });
         }
 
-        // 初期化処理を実行
         initLLM();
     </script>
 </body>
