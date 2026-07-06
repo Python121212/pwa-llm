@@ -1,17 +1,21 @@
 {
-  "name": "Local LLM PWA",
   "short_name": "LocalLLM",
-  "start_url": "./index.html",
-  "display": "standalone",
-  "background_color": "#121212",
-  "theme_color": "#1f1f1f",
-  "orientation": "portrait-primary",
+  "name": "Local LLM PWA Chat",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/1693/1693746.png",
+      "src": "icon-192.png",
       "type": "image/png",
-      "sizes": "512x512",
-      "purpose": "any maskable"
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
     }
-  ]
+  ],
+  "start_url": "./index.html",
+  "background_color": "#f3f4f6",
+  "theme-color": "#4f46e5",
+  "display": "standalone",
+  "orientation": "portrait"
 }
