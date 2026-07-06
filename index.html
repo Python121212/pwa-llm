@@ -3,128 +3,365 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Local LLM PWA</title>
+    <title>Gemini-like Local LLM with Artifacts</title>
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#4f46e5">
+    <meta name="theme-color" content="#1e1e24">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: #f3f4f6;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #131314;
+            color: #e3e3e3;
             display: flex;
-            flex-direction: column;
             height: 100vh;
             height: 100dvh;
             overflow: hidden;
         }
-        header {
-            background-color: #4f46e5;
-            color: white;
-            padding: 15px;
-            text-align: center;
-            font-weight: bold;
-            font-size: 1.2rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+        /* メインレイアウト（Gemini風2ペイン） */
+        #app-container {
+            display: flex;
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            position: relative;
         }
+
+        /* 左側：チャットエリア */
+        #chat-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background-color: #131314;
+        }
+
+        header {
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #2f2f30;
+        }
+        .brand { font-size: 1.25rem; font-weight: 500; color: #a8c7fa; }
+        
+        /* モデル選択用セレクトボックス */
+        select {
+            background-color: #1e1e1f;
+            color: #e3e3e3;
+            border: 1px solid #444746;
+            padding: 6px 12px;
+            border-radius: 8px;
+            outline: none;
+            font-size: 0.85rem;
+            cursor: pointer;
+            max-width: 200px;
+        }
+
         #chat-container {
             flex: 1;
             overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .status {
+            align-self: center;
+            background-color: #1e1e1f;
+            border: 1px solid #333538;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            max-width: 80%;
+            white-space: pre-wrap;
+            color: #c4c7c5;
+            text-align: center;
+        }
+
+        /* メッセージスタイル */
+        .message {
+            max-width: 85%;
+            line-height: 1.6;
+            word-break: break-word;
+            font-size: 1rem;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .user {
+            align-self: flex-end;
+            background-color: #2b2a33;
+            padding: 12px 18px;
+            border-radius: 20px 20px 4px 20px;
+            color: #f4f4f5;
+        }
+        .ai {
+            align-self: flex-start;
+            padding: 12px 0; /* GeminiはAIの背景をつけないフラットなUI */
+            color: #e3e3e3;
+            width: 100%;
+        }
+
+        /* 入力エリア */
+        #input-outer-container {
+            padding: 0 24px 24px 24px;
+            background-color: #131314;
+        }
+        #input-container {
+            background-color: #1e1e1f;
+            border-radius: 28px;
+            padding: 8px 16px 8px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid transparent;
+        }
+        #input-container:focus-within {
+            border-color: #444746;
+            background-color: #28292a;
+        }
+        textarea {
+            flex: 1;
+            background: none;
+            border: none;
+            resize: none;
+            height: 24px;
+            color: #e3e3e3;
+            font-size: 1rem;
+            outline: none;
+            font-family: inherit;
+            line-height: 24px;
+        }
+        button {
+            background-color: #a8c7fa;
+            color: #042f66;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        button:disabled { background-color: #3c4043; color: #80868b; cursor: not-allowed; }
+
+        /* 右側：Artifacts（ファイル表示）エリア */
+        #artifact-section {
+            width: 40%;
+            min-width: 320px;
+            border-left: 1px solid #2f2f30;
+            background-color: #1c1b1f;
+            display: none; /* デフォルトは非表示、コード生成時のみ出現 */
+            flex-direction: column;
+            height: 100%;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+        .artifact-header {
+            padding: 16px;
+            background-color: #131314;
+            border-bottom: 1px solid #2f2f30;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .artifact-title { font-weight: 500; color: #c4c7c5; font-size: 0.9rem; }
+        .close-artifact { cursor: pointer; color: #80868b; background: none; border: none; width: auto; height: auto; font-size: 1.2rem;}
+
+        .artifact-card {
+            flex: 1;
             padding: 20px;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
-        .message {
-            max-width: 85%;
-            padding: 12px 16px;
-            border-radius: 18px;
-            line-height: 1.5;
-            word-break: break-word;
-            font-size: 0.95rem;
+        .file-info-box {
+            background-color: #28292a;
+            border: 1px solid #444746;
+            border-radius: 12px;
+            padding: 16px;
         }
-        .user {
-            background-color: #4f46e5;
-            color: white;
-            align-self: flex-end;
-            border-bottom-right-radius: 2px;
-        }
-        .ai {
-            background-color: white;
-            color: #1f2937;
-            align-self: flex-start;
-            border-bottom-left-radius: 2px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        }
-        .status {
-            text-align: center;
-            color: #4b5563;
-            font-size: 0.85rem;
-            background-color: #e5e7eb;
-            padding: 10px;
+        .file-meta { font-size: 0.8rem; color: #9aa0a6; margin-bottom: 8px; }
+        .file-name { font-size: 1.1rem; font-weight: bold; color: #a8c7fa; margin-bottom: 12px; }
+        
+        pre {
+            background-color: #0f0f11;
+            padding: 16px;
             border-radius: 8px;
-            white-space: pre-wrap;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+            color: #e3e3e3;
+            border: 1px solid #2f2f30;
         }
-        #input-container {
-            padding: 12px;
-            background-color: white;
-            border-top: 1px solid #e5e7eb;
-            display: flex;
-            gap: 10px;
-            align-items: center;
+        .action-btn {
+            background-color: #3c4043;
+            color: #e3e3e3;
+            border-radius: 8px;
+            width: auto;
+            height: auto;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            margin-top: 10px;
+            display: inline-block;
+            text-align: center;
         }
-        textarea {
-            flex: 1;
-            resize: none;
-            height: 44px;
-            padding: 12px;
-            border: 1px solid #d1d5db;
-            border-radius: 22px;
-            font-size: 1rem;
-            outline: none;
-            font-family: inherit;
+
+        /* 画面サイズに応じた自動レスポンシブ（スマホ時は縦並び、または重ねる） */
+        @media (max-width: 768px) {
+            #app-container { flex-direction: column; }
+            #artifact-section {
+                position: absolute;
+                top: 0; right: 0; width: 100%; height: 100%;
+                z-index: 10;
+            }
         }
-        textarea:focus { border-color: #4f46e5; }
-        button {
-            background-color: #4f46e5;
-            color: white;
-            border: none;
-            padding: 0 20px;
-            height: 44px;
-            border-radius: 22px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.2s;
-            white-space: nowrap;
-        }
-        button:disabled { background-color: #9ca3af; cursor: not-allowed; }
     </style>
 </head>
 <body>
 
-    <header>Local LLM Chat</header>
-    
-    <div id="chat-container">
-        <div class="status" id="status">WebGPUの互換性を確認中...</div>
-    </div>
+    <div id="app-container">
+        <div id="chat-section">
+            <header>
+                <div class="brand">Local Gemini</div>
+                <select id="model-selector">
+                    <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (最軽量・最速)</option>
+                    <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (標準)</option>
+                    <option value="gemma-2-2b-it-q4f16_1-MLC">Gemma 2 2B (Google製)</option>
+                    <option value="Phi-3-mini-4k-instruct-q4f16_1-MLC">Phi-3 Mini (高精度)</option>
+                    <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen 2.5 1.5B (日本語強力)</option>
+                </select>
+            </header>
+            
+            <div id="chat-container">
+                <div class="status" id="status">IndexedDB から記憶をロード中...</div>
+            </div>
 
-    <div id="input-container">
-        <textarea id="user-input" placeholder="メッセージを入力..." disabled></textarea>
-        <button id="send-btn" disabled>送信</button>
+            <div id="input-outer-container">
+                <div id="input-container">
+                    <textarea id="user-input" placeholder="メッセージを入力..." disabled></textarea>
+                    <button id="send-btn" disabled>➔</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="artifact-section">
+            <div class="artifact-header">
+                <div class="artifact-title">Artifact (AI 2 解析結果)</div>
+                <button class="close-artifact" id="close-artifact-btn">✕</button>
+            </div>
+            <div class="artifact-card" id="artifact-card-content">
+                </div>
+        </div>
     </div>
 
     <script type="module">
-        // WebLLM のインポート
         import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
         const chatContainer = document.getElementById('chat-container');
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
         const statusDiv = document.getElementById('status');
+        const modelSelector = document.getElementById('model-selector');
+        const artifactSection = document.getElementById('artifact-section');
+        const artifactCardContent = document.getElementById('artifact-card-content');
+        const closeArtifactBtn = document.getElementById('close-artifact-btn');
 
-        // スマートフォンで軽量かつ高速に動く10億パラメータのモデルを指定
-        const selectedModel = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; 
-        
         let engine;
+        let db;
+        let conversationHistory = [];
+
+        // 1. IndexedDBの初期化 (永久的な記憶・Wasm64環境補完用ストレージ)
+        function initDatabase() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open("LocalLLMMemoryDB", 1);
+                request.onupgradeneeded = (e) => {
+                    db = e.target.result;
+                    if (!db.objectStoreNames.contains("messages")) {
+                        db.createObjectStore("messages", { keyPath: "id", autoIncrement: true });
+                    }
+                };
+                request.onsuccess = (e) => {
+                    db = e.target.result;
+                    resolve();
+                };
+                request.onerror = (e) => reject(e);
+            });
+        }
+
+        // 過去の会話を永久記憶からロード
+        async function loadHistory() {
+            const transaction = db.transaction(["messages"], "readonly");
+            const store = transaction.objectStore(transaction.objectStoreNames[0]);
+            const request = store.getAll();
+            
+            request.onsuccess = () => {
+                conversationHistory = request.result || [];
+                if (conversationHistory.length > 0) {
+                    statusDiv.innerText = `過去の記憶を ${conversationHistory.length} 件復元しました。`;
+                    conversationHistory.forEach(msg => {
+                        appendMessage(msg.text, msg.sender);
+                        // 過去ログにコードが含まれていればArtifactも再生成可能
+                        if (msg.sender === 'ai') inspectAndProcessArtifact(msg.text, false);
+                    });
+                }
+                initLLM(); // 履歴ロード後にLLMを初期化
+            };
+        }
+
+        // 記憶の保存
+        function saveToPermanentMemory(text, sender) {
+            const transaction = db.transaction(["messages"], "readwrite");
+            const store = transaction.objectStore("messages");
+            const data = { text, sender, timestamp: Date.now() };
+            store.add(data);
+            conversationHistory.push(data);
+        }
+
+        // 2. WebLLM (AI 1) の初期化
+        async function initLLM() {
+            const selectedModel = modelSelector.value;
+            if (!navigator.gpu) {
+                statusDiv.innerText = "エラー: WebGPUが未検出です。flags設定を確認してください。";
+                return;
+            }
+
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+
+            try {
+                statusDiv.innerText = `${selectedModel} を初期化中（初回は数分かかります）...`;
+                
+                engine = await webllm.CreateMLCEngine(
+                    selectedModel,
+                    {
+                        initProgressCallback: (report) => {
+                            statusDiv.innerText = `ダウンロード状況: ${Math.round(report.progress * 100)}%\n${report.text}`;
+                        }
+                    }
+                );
+                
+                statusDiv.innerText = "ローカルLLM 準備完了。何でも聞いてください。";
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+            } catch (error) {
+                statusDiv.style.backgroundColor = "#fee2e2";
+                statusDiv.style.color = "#991b1b";
+                statusDiv.innerText = `初期化失敗:\n${error.message || error}`;
+                console.error(error);
+            }
+        }
+
+        // モデル変更時の再トリガー
+        modelSelector.addEventListener('change', initLLM);
 
         function appendMessage(text, sender) {
             const msgDiv = document.createElement('div');
@@ -135,52 +372,77 @@
             return msgDiv;
         }
 
-        async function initLLM() {
-            if (!navigator.gpu) {
-                statusDiv.innerText = "エラー: お使いのブラウザや端末はWebGPUに対応していないか、無効化されています。";
-                return;
-            }
+        // 3. AI 2 (リアルタイム解析・分類・Artifact化処理)
+        function inspectAndProcessArtifact(currentText, shouldOpenPane = true) {
+            // 正規表現でバッククォートに囲まれたコードブロックを検知 (言語名と中身を抽出)
+            const codeBlockRegex = /```(\w*)\n([\s\S]*?)(```|$)/;
+            const match = currentText.match(codeBlockRegex);
 
-            try {
-                statusDiv.innerText = "WebGPUを検出。初期化を開始します（数分かかります）...";
+            if (match) {
+                const detectedLang = match[1] || 'text';
+                const codeBody = match[2];
                 
-                // 正しい最新API：CreateMLCEngine を呼び出し
-                engine = await webllm.CreateMLCEngine(
-                    selectedModel,
-                    {
-                        initProgressCallback: (report) => {
-                            statusDiv.innerText = `状況: ${Math.round(report.progress * 100)}%\n${report.text}`;
-                        }
-                    }
-                );
-                
-                statusDiv.innerText = "準備完了！モデルはブラウザにキャッシュされました。";
-                userInput.disabled = false;
-                sendBtn.disabled = false;
-            } catch (error) {
-                statusDiv.style.backgroundColor = "#fee2e2";
-                statusDiv.style.color = "#991b1b";
-                statusDiv.innerText = `初期化失敗詳細:\n${error.message || error}`;
-                console.error(error);
+                // 自動判別：コードブロックが有意にある場合はArtifactを更新
+                if (codeBody.trim().length > 5) {
+                    generateArtifactCard(detectedLang, codeBody);
+                    if (shouldOpenPane) artifactSection.style.display = 'flex';
+                }
             }
         }
 
+        // Artifact（ファイルカード）の生成・レンダリング
+        function generateArtifactCard(lang, code) {
+            artifactCardContent.innerHTML = ''; // クリア
+            
+            const extMap = { javascript: 'js', html: 'html', css: 'css', python: 'py', typescript: 'ts' };
+            const ext = extMap[lang.toLowerCase()] || 'txt';
+            const fileName = `generated_artifact.${ext}`;
+
+            const card = document.createElement('div');
+            card.classList.add('file-info-box');
+            card.innerHTML = `
+                <div class="file-meta">判定された言語: ${lang.toUpperCase()}</div>
+                <div class="file-name">📄 ${fileName}</div>
+                <pre><code>${escapeHtml(code)}</code></pre>
+                <a class="action-btn" id="download-artifact-btn" href="#">ファイルをダウンロード</a>
+            `;
+            artifactCardContent.appendChild(card);
+
+            // ダウンロードロジックの埋め込み
+            const blob = new Blob([code], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const dlBtn = card.querySelector('#download-artifact-btn');
+            dlBtn.href = url;
+            dlBtn.download = fileName;
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        // 4. 送信とストリーミング生成処理
         async function handleSend() {
             const text = userInput.value.trim();
             if (!text) return;
 
             userInput.value = '';
             appendMessage(text, 'user');
+            saveToPermanentMemory(text, 'user'); // 永久記憶へ保存
             
             userInput.disabled = true;
             sendBtn.disabled = true;
 
-            const aiMessageDiv = appendMessage("思考中...", 'ai');
+            const aiMessageDiv = appendMessage("Thinking...", 'ai');
 
             try {
-                const messages = [{ role: "user", content: text }];
+                // 記憶システム：直近10件のコンテキストを会話履歴から抽出してLLMへ投入
+                const promptMessages = conversationHistory.map(h => ({
+                    role: h.sender === 'user' ? 'user' : 'assistant',
+                    content: h.text
+                })).slice(-10);
+
                 const chunks = await engine.chat.completions.create({
-                    messages,
+                    messages: promptMessages,
                     stream: true
                 });
 
@@ -190,9 +452,16 @@
                     reply += content;
                     aiMessageDiv.innerText = reply;
                     chatContainer.scrollTop = chatContainer.scrollHeight;
+
+                    // AI 2: 生成中のテキストをリアルタイムで検知・解析
+                    inspectAndProcessArtifact(reply, true);
                 }
+
+                // 完了後にAIの出力を永久記憶にコミット
+                saveToPermanentMemory(reply, 'ai');
+
             } catch (e) {
-                aiMessageDiv.innerText = "生成中にエラーが発生しました。";
+                aiMessageDiv.innerText = "エラーが発生しました。";
                 console.error(e);
             } finally {
                 userInput.disabled = false;
@@ -201,6 +470,7 @@
             }
         }
 
+        // UIイベント
         sendBtn.addEventListener('click', handleSend);
         userInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -208,17 +478,22 @@
                 handleSend();
             }
         });
+        closeArtifactBtn.addEventListener('click', () => {
+            artifactSection.style.display = 'none';
+        });
 
-        // PWA用のService Worker登録
+        // PWA サービスワーカー登録
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('Service Worker 登録成功'))
-                    .catch(err => console.error('Service Worker 登録失敗', err));
+                navigator.serviceWorker.register('sw.js').catch(err => console.error(err));
             });
         }
 
-        initLLM();
+        // 起動シーケンス
+        initDatabase().then(loadHistory).catch(err => {
+            console.error("Database error", err);
+            initLLM(); // DB失敗でもLLM起動を試みる
+        });
     </script>
 </body>
 </html>
