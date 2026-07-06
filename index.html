@@ -354,7 +354,7 @@
             } catch (err) { console.error(err); }
         }
 
-        // 3. 勉強用コードの設計思想に基づいてエンジン初期化をリライト
+        // エンジン初期化
         async function initLLM() {
             const selectedModel = modelSelector.value;
             userInput.disabled = true;
@@ -363,15 +363,22 @@
             try {
                 statusDiv.innerText = "バックグラウンドWorkerを起動し、高速推論コアを構築中...";
 
-                // インポートされたCDNから直接Workerの中身をBlobURL（仮想ファイル）化して生成
-                // これにより別ファイルの「worker.js」を用意しなくても1ファイルでWorker駆動が完結します
-                const workerCode = `import { WebWorkerMLCEngineHandler } from "https://esm.run/@mlc-ai/web-llm"; const handler = new WebWorkerMLCEngineHandler(); self.onmessage = (msg) => { handler.onmessage(msg); };`;
+                // 【修正】Worker内部から確実かつ高速にライブラリをロードするために、importScripts 形式へ変更
+                const workerCode = `
+                    importScripts("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/lib/index.js");
+                    if (typeof self.webllm === 'undefined' && typeof WebWorkerMLCEngineHandler === 'undefined') {
+                        console.error("WebLLM のロードに失敗しました。");
+                    }
+                    const HandlerClass = typeof WebWorkerMLCEngineHandler !== 'undefined' ? WebWorkerMLCEngineHandler : self.webllm.WebWorkerMLCEngineHandler;
+                    const handler = new HandlerClass();
+                    self.onmessage = (msg) => { handler.onmessage(msg); };
+                `;
                 const blob = new Blob([workerCode], { type: "text/javascript" });
                 const workerUrl = URL.createObjectURL(blob);
 
-                // 提供コードと同じく、CreateWebWorkerEngineを使用して初期化
+                // メイン側は importmap から読み込んだ安定版関数で起動
                 engine = await CreateWebWorkerEngine(
-                    new Worker(workerUrl, { type: "module" }),
+                    new Worker(workerUrl),
                     selectedModel,
                     {
                         initProgressCallback: (report) => {
@@ -513,7 +520,6 @@
 
                 if (contextPayload) promptMessages[promptMessages.length - 1].content = finalPrompt;
 
-                // ストリーミング生成（リアルタイム表示）
                 const chunks = await engine.chat.completions.create({
                     messages: promptMessages,
                     stream: true
@@ -541,10 +547,4 @@
             }
         }
 
-        sendBtn.addEventListener('click', handleSend);
-        userInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-        });
-
-        closeArtifactBtn.addEventListener('click', () => {
-            artifactS
+        sendBt
