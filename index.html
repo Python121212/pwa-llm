@@ -239,6 +239,14 @@
             }
         }
     </style>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "@mlc-ai/webllm": "https://esm.run/@mlc-ai/web-llm"
+      }
+    }
+    </script>
 </head>
 <body>
 
@@ -280,7 +288,7 @@
     </div>
 
     <script type="module">
-        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+        import { CreateWebWorkerEngine } from "@mlc-ai/webllm";
 
         const chatContainer = document.getElementById('chat-container');
         const userInput = document.getElementById('user-input');
@@ -298,41 +306,29 @@
         let conversationHistory = [];
         let attachedFilesContents = [];
 
-        // 1. IndexedDB 永久記憶
+        // IndexedDB 永久記憶
         function initDatabase() {
             return new Promise((resolve, reject) => {
                 try {
                     const request = indexedDB.open("LocalLLMMemoryV2", 1);
-                    
                     request.onupgradeneeded = (e) => {
                         const database = e.target.result;
                         if (!database.objectStoreNames.contains("messages")) {
                             database.createObjectStore("messages", { keyPath: "id", autoIncrement: true });
                         }
                     };
-                    
-                    request.onsuccess = (e) => { 
-                        db = e.target.result; 
-                        resolve(); 
-                    };
-                    
+                    request.onsuccess = (e) => { db = e.target.result; resolve(); };
                     request.onerror = (e) => { reject(e.target.error); };
-                } catch (err) {
-                    reject(err);
-                }
+                } catch (err) { reject(err); }
             });
         }
 
         async function loadHistory() {
-            if (!db) {
-                initLLM();
-                return;
-            }
+            if (!db) { initLLM(); return; }
             try {
                 const transaction = db.transaction(["messages"], "readonly");
                 const store = transaction.objectStore("messages");
                 const request = store.getAll();
-                
                 request.onsuccess = (e) => {
                     conversationHistory = e.target.result || [];
                     if (conversationHistory.length > 0) {
@@ -344,11 +340,8 @@
                     }
                     initLLM();
                 };
-                
                 request.onerror = () => { initLLM(); };
-            } catch (err) {
-                initLLM();
-            }
+            } catch (err) { initLLM(); }
         }
 
         function saveToMemory(text, sender) {
@@ -358,12 +351,10 @@
                 const transaction = db.transaction(["messages"], "readwrite");
                 const store = transaction.objectStore("messages");
                 store.add({ text, sender, timestamp: Date.now() });
-            } catch (err) {
-                console.error("Database save fallback active:", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
-        // 2. WebWorkerによる超高速・バックグラウンド並列処理
+        // 3. 勉強用コードの設計思想に基づいてエンジン初期化をリライト
         async function initLLM() {
             const selectedModel = modelSelector.value;
             userInput.disabled = true;
@@ -371,14 +362,20 @@
 
             try {
                 statusDiv.innerText = "バックグラウンドWorkerを起動し、高速推論コアを構築中...";
-                
-                // 【修正】タイポ修正：CreateCreateWebWorkerEngine -> CreateWebWorkerEngine
-                engine = await webllm.CreateWebWorkerEngine(
-                    new Worker(new URL("https://esm.run/@mlc-ai/web-llm")),
+
+                // インポートされたCDNから直接Workerの中身をBlobURL（仮想ファイル）化して生成
+                // これにより別ファイルの「worker.js」を用意しなくても1ファイルでWorker駆動が完結します
+                const workerCode = `import { WebWorkerMLCEngineHandler } from "https://esm.run/@mlc-ai/web-llm"; const handler = new WebWorkerMLCEngineHandler(); self.onmessage = (msg) => { handler.onmessage(msg); };`;
+                const blob = new Blob([workerCode], { type: "text/javascript" });
+                const workerUrl = URL.createObjectURL(blob);
+
+                // 提供コードと同じく、CreateWebWorkerEngineを使用して初期化
+                engine = await CreateWebWorkerEngine(
+                    new Worker(workerUrl, { type: "module" }),
                     selectedModel,
                     {
                         initProgressCallback: (report) => {
-                            statusDiv.innerText = `高速化キャッシュ同期中: ${Math.round(report.progress * 100)}%\n${report.text}`;
+                            statusDiv.innerText = report.text;
                         }
                     }
                 );
@@ -388,14 +385,14 @@
                 sendBtn.disabled = false;
             } catch (error) {
                 statusDiv.innerText = `初期化エラー: ${error.message || error}\nWebGPUが有効かご確認ください。`;
+                console.error(error);
             }
         }
 
         modelSelector.addEventListener('change', initLLM);
 
-        // 3. ファイルのインポート読み込み処理
+        // ファイルのインポート読み込み処理
         fileLoader.addEventListener('change', (e) => handleFileImport(e.target.files));
-        
         window.addEventListener('dragover', (e) => e.preventDefault());
         window.addEventListener('drop', (e) => {
             e.preventDefault();
@@ -437,7 +434,7 @@
             return msgDiv;
         }
 
-        // 4. AI 2：Artifact機能（自動識別拡張子）
+        // AI 2：Artifact機能
         function inspectAndProcessArtifact(currentText, shouldOpen = true) {
             const codeBlockRegex = /```(\w*)\n([\s\S]*?)(```|$)/;
             const match = currentText.match(codeBlockRegex);
@@ -454,7 +451,6 @@
 
         function renderArtifact(lang, code) {
             artifactCardContent.innerHTML = '';
-            
             const extMap = {
                 html: 'html', css: 'css', javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts',
                 python: 'py', py: 'py', ruby: 'rb', csharp: 'cs', cpp: 'cpp', c: 'c',
@@ -484,13 +480,12 @@
             return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
 
-        // 5. 生成対話 & 添付ファイルコンテキスト処理
+        // 生成対話 & 添付ファイルコンテキスト処理
         async function handleSend() {
             let text = userInput.value.trim();
             if (!text && attachedFilesContents.length === 0) return;
 
             userInput.value = '';
-            
             let contextPayload = "";
             if (attachedFilesContents.length > 0) {
                 contextPayload += "[分析対象ファイルデータ]\n";
@@ -518,6 +513,7 @@
 
                 if (contextPayload) promptMessages[promptMessages.length - 1].content = finalPrompt;
 
+                // ストリーミング生成（リアルタイム表示）
                 const chunks = await engine.chat.completions.create({
                     messages: promptMessages,
                     stream: true
@@ -551,9 +547,4 @@
         });
 
         closeArtifactBtn.addEventListener('click', () => {
-            artifactSection.style.display = 'none';
-        });
-
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(e => {}); });
-    
+            artifactS
