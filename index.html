@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Local LLM PWA</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#4f46e5">
@@ -14,7 +14,8 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
-            height: 100dvh; /* モバイルのツールバー対策 */
+            height: 100dvh; /* モバイルのツールバーを考慮した高さ */
+            overflow: hidden;
         }
         header {
             background-color: #4f46e5;
@@ -23,6 +24,7 @@
             text-align: center;
             font-weight: bold;
             font-size: 1.2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         #chat-container {
             flex: 1;
@@ -38,6 +40,7 @@
             border-radius: 18px;
             line-height: 1.5;
             word-break: break-word;
+            font-size: 0.95rem;
         }
         .user {
             background-color: #4f46e5;
@@ -54,16 +57,20 @@
         }
         .status {
             text-align: center;
-            color: #6b7280;
+            color: #4b5563;
             font-size: 0.85rem;
-            font-style: italic;
+            background-color: #e5e7eb;
+            padding: 10px;
+            border-radius: 8px;
+            white-space: pre-wrap;
         }
         #input-container {
-            padding: 15px;
+            padding: 12px;
             background-color: white;
             border-top: 1px solid #e5e7eb;
             display: flex;
             gap: 10px;
+            align-items: center;
         }
         textarea {
             flex: 1;
@@ -74,6 +81,7 @@
             border-radius: 22px;
             font-size: 1rem;
             outline: none;
+            font-family: inherit;
         }
         textarea:focus { border-color: #4f46e5; }
         button {
@@ -81,10 +89,12 @@
             color: white;
             border: none;
             padding: 0 20px;
+            height: 44px;
             border-radius: 22px;
             font-weight: bold;
             cursor: pointer;
             transition: background 0.2s;
+            white-space: nowrap;
         }
         button:disabled { background-color: #9ca3af; cursor: not-allowed; }
     </style>
@@ -94,7 +104,7 @@
     <header>Local LLM Chat</header>
     
     <div id="chat-container">
-        <div class="status" id="status">モデルを初期化中...（数分かかる場合があります）</div>
+        <div class="status" id="status">WebGPUの互換性を確認中...</div>
     </div>
 
     <div id="input-container">
@@ -103,7 +113,7 @@
     </div>
 
     <script type="module">
-        // WebLLM のインポート
+        // WebLLMの読み込み
         import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
         const chatContainer = document.getElementById('chat-container');
@@ -111,12 +121,11 @@
         const sendBtn = document.getElementById('send-btn');
         const statusDiv = document.getElementById('status');
 
-        // 軽量で日本語もそこそこ動くモデルを選択 (環境に合わせて変更可能)
-        const selectedModel = "Llama-3-8B-Instruct-q4f16_1-MLC"; 
+        // スマホのメモリ（RAM）制限に引っかからないよう、最軽量クラスの1Bモデルを指定
+        const selectedModel = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; 
         
         let engine;
 
-        // チャットにメッセージを追加する関数
         function appendMessage(text, sender) {
             const msgDiv = document.createElement('div');
             msgDiv.classList.add('message', sender);
@@ -126,28 +135,38 @@
             return msgDiv;
         }
 
-        // WebLLMの初期化
         async function initLLM() {
+            // WebGPUがブラウザ・システムに認識されているかチェック
+            if (!navigator.gpu) {
+                statusDiv.innerText = "エラー: お使いのブラウザや端末はWebGPUに対応していないか、無効化されています。";
+                return;
+            }
+
             try {
-                engine = await webllm.CreateCreateWebWorkerEngine(
-                    new Worker(new URL("https://esm.run/@mlc-ai/web-llm")),
+                statusDiv.innerText = "WebGPUを検出しました。\nモデルのダウンロードと初期化を開始します（数分かかります）...";
+                
+                // スマホでの動作安定のため、Workerを使わずメインスレッドで直接Engineを生成
+                engine = await webllm.CreateEngine(
                     selectedModel,
                     {
                         initProgressCallback: (report) => {
-                            statusDiv.innerText = `読み込み中: ${Math.round(report.progress * 100)}% - ${report.text}`;
+                            statusDiv.innerText = `状況: ${Math.round(report.progress * 100)}%\n${report.text}`;
                         }
                     }
                 );
-                statusDiv.innerText = "準備完了！モデルはブラウザにキャッシュされています。";
+                
+                statusDiv.innerText = "準備完了！モデルはブラウザにキャッシュされました。";
                 userInput.disabled = false;
                 sendBtn.disabled = false;
             } catch (error) {
-                statusDiv.innerText = "初期化失敗。WebGPUが有効か確認してください。";
+                // エラー内容を詳しく画面に出力する
+                statusDiv.style.backgroundColor = "#fee2e2";
+                statusDiv.style.color = "#991b1b";
+                statusDiv.innerText = `初期化失敗詳細:\n${error.message || error}\n\n※スマホのメモリ不足(Out of memory)の可能性があります。`;
                 console.error(error);
             }
         }
 
-        // 送信処理
         async function handleSend() {
             const text = userInput.value.trim();
             if (!text) return;
@@ -175,7 +194,7 @@
                     chatContainer.scrollTop = chatContainer.scrollHeight;
                 }
             } catch (e) {
-                aiMessageDiv.innerText = "エラーが発生しました。";
+                aiMessageDiv.innerText = "生成中にエラーが発生しました。";
                 console.error(e);
             } finally {
                 userInput.disabled = false;
@@ -192,7 +211,7 @@
             }
         });
 
-        // Service Worker の登録
+        // PWA用のService Worker登録
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js')
@@ -201,7 +220,7 @@
             });
         }
 
-        // 初期化スタート
+        // 初期化処理を実行
         initLLM();
     </script>
 </body>
