@@ -13,6 +13,7 @@
             --text-color: #e3e3e3;
             --input-bg: #282a2d;
             --accent-color: #a8c7fa;
+            --error-color: #ff6b6b;
         }
 
         * {
@@ -45,6 +46,7 @@
         #status {
             font-size: 0.85rem;
             color: #aaa;
+            transition: color 0.3s;
         }
 
         /* チャットエリア */
@@ -81,6 +83,10 @@
 
         .message.user .sender {
             color: #c4eded;
+        }
+
+        .message.system .sender {
+            color: #aaa;
         }
 
         .message .text {
@@ -169,7 +175,7 @@
         const sendBtn = document.getElementById('send-btn');
         const statusDiv = document.getElementById('status');
 
-        // 軽量で高速なモデルを選択（Llama-3-8B-Instructの量子化版など。環境に合わせて変更可能）
+        // 軽量で高速なモデルを選択
         const selectedModel = "Llama-3-8B-Instruct-q4f16_1-MLC";
         
         let engine;
@@ -183,7 +189,7 @@
         // メッセージ追加関数
         function appendMessage(sender, text) {
             const msgDiv = document.createElement('div');
-            msgDiv.classList.add('message', sender === 'あなた' ? 'user' : 'ai');
+            msgDiv.classList.add('message', sender === 'あなた' ? 'user' : (sender === 'システム' ? 'system' : 'ai'));
             
             const senderDiv = document.createElement('div');
             senderDiv.classList.add('sender');
@@ -205,10 +211,15 @@
             try {
                 // 進捗状況のコールバック
                 const initProgressCallback = (report) => {
-                    statusDiv.innerText = report.text;
+                    if (typeof report.progress === 'number') {
+                        const percent = Math.round(report.progress * 100);
+                        statusDiv.innerText = `ダウンロード中... ${percent}%`;
+                    } else {
+                        statusDiv.innerText = report.text;
+                    }
                 };
 
-                // 快適な動作のためにWeb Worker経由でバックグラウンド実行
+                // Web Worker経由でバックグラウンド実行
                 engine = await CreateWebWorkerEngine(
                     new Worker(new URL(import.meta.url)),
                     selectedModel,
@@ -219,8 +230,12 @@
                 userInput.disabled = false;
                 sendBtn.disabled = false;
             } catch (error) {
-                statusDiv.innerText = "エラーが発生しました: " + error.message;
-                console.error(error);
+                // エラー発生時の処理
+                statusDiv.style.color = "var(--error-color)";
+                statusDiv.innerText = `エラー: ${error.message || error}`;
+                console.error("WebLLM Init Error:", error);
+                
+                appendMessage('システム', `エラーが発生しました。ブラウザがWebGPUに対応しているか確認してください。\n詳細: ${error.message}`);
             }
         }
 
@@ -236,7 +251,6 @@
 
             appendMessage('あなた', text);
             
-            // AIの返答用プレースホルダーを作成
             const aiResponseElement = appendMessage('Gemini-Local', '思考中...');
 
             try {
@@ -254,8 +268,9 @@
                     chatContainer.scrollTop = chatContainer.scrollHeight;
                 }
             } catch (e) {
-                aiResponseElement.innerText = "エラーが発生しました。";
-                console.error(e);
+                aiResponseElement.style.color = "var(--error-color)";
+                aiResponseElement.innerText = `エラーが発生しました。\n詳細: ${e.message}`;
+                console.error("Chat Error:", e);
             } finally {
                 userInput.disabled = false;
                 sendBtn.disabled = false;
